@@ -56,7 +56,7 @@ const CONFIG = {
   utterances: {
     enable: true,
     config: {
-      repo: process.env.NEXT_PUBLIC_UTTERANCES_REPO || "",
+      repo: "SilverStone06/silverstone06.github.io",
       "issue-term": "og:title",
       label: "💬 Utterances",
     },
