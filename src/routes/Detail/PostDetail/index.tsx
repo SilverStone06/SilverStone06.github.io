@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react"
+import React, { useMemo, useRef, useEffect } from "react"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import CommentBox from "./CommentBox"
@@ -8,7 +8,7 @@ import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useScroll from "src/hooks/useScroll"
 import ReadingProgressBar from "src/components/ReadingProgressBar"
-import { getPageTableOfContents } from "notion-utils"
+import { getPageTableOfContents, idToUuid } from "notion-utils"
 
 type Props = {}
 
@@ -46,14 +46,87 @@ const PostDetail: React.FC<Props> = () => {
     e.preventDefault()
     if (typeof document === "undefined") return
 
-    const el = document.getElementById(id)
-    if (!el) return
+    const candidates: string[] = []
 
-    const yOffset = -80
-    const y = el.getBoundingClientRect().top + window.scrollY + yOffset
+    if (id) candidates.push(id)
 
-    window.scrollTo({ top: y, behavior: "smooth" })
+    try {
+      const uuid = idToUuid(id)
+      if (uuid && uuid !== id) candidates.push(uuid)
+    } catch {}
+
+    if (id.includes("-")) {
+      candidates.push(id.replace(/-/g, ""))
+    }
+
+    let target: HTMLElement | null = null
+
+    for (const cand of candidates) {
+      const el = document.getElementById(cand)
+      if (el) {
+        target = el as HTMLElement
+        break
+      }
+    }
+
+    if (!target) {
+      for (const cand of candidates) {
+        const anchor = document.querySelector<HTMLAnchorElement>(
+          `a.notion-hash-link[href="#${cand}"]`
+        )
+        if (anchor) {
+          target = (anchor.parentElement || anchor) as HTMLElement
+          break
+        }
+      }
+    }
+
+    if (!target) return
+
+    const headerOffset = 80
+    const rect = target.getBoundingClientRect()
+    const scrollTop = window.scrollY || window.pageYOffset
+    const targetY = rect.top + scrollTop - headerOffset
+
+    window.scrollTo({
+      top: targetY,
+      behavior: "smooth",
+    })
+
+    const finalId = target.id || id
+    if (finalId) {
+      history.replaceState(null, "", `#${finalId}`)
+    }
   }
+
+  useEffect(() => {
+    if (typeof document === "undefined") return
+
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+
+      const anchor = target.closest("a.notion-hash-link") as
+        | HTMLAnchorElement
+        | null
+      if (!anchor) return
+
+      const href = anchor.getAttribute("href") || ""
+      if (!href.startsWith("#")) return
+
+      e.preventDefault()
+      const id = href.slice(1)
+      const fakeEvent = { preventDefault() {} } as React.MouseEvent<
+        HTMLAnchorElement
+      >
+      handleTocClick(id)(fakeEvent)
+    }
+
+    document.addEventListener("click", onClick)
+    return () => {
+      document.removeEventListener("click", onClick)
+    }
+  }, [])
 
   return (
     <>
