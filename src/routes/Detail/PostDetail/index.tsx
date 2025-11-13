@@ -216,6 +216,26 @@ const StyledWrapper = styled.div`
     margin: 0 auto;
     max-width: 42rem;
   }
+
+    /* Notion callout / quote text 크기 줄이기 */
+  .notion-callout *,
+  .notion-quote * {
+    font-size: 0.90rem !important;
+    line-height: 1.55 !important;
+  }
+
+    /* 노션 구분선(divider) */
+  .notion-hr {
+    border: none;
+    border-top: 2px solid
+      ${({ theme }) =>
+        theme.scheme === "light"
+          ? "rgba(148, 163, 184, 0.7)"   // 라이트 모드
+          : "rgba(148, 163, 184, 0.4)"}; // 다크 모드
+    margin: 1.75rem 0;
+  }
+
+
 `
 
 const StyledTopToc = styled.nav`
