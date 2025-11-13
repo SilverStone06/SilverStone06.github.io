@@ -1,4 +1,4 @@
-import React, { useRef } from "react"
+import React, { useMemo, useRef } from "react"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import CommentBox from "./CommentBox"
@@ -8,8 +8,15 @@ import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useScroll from "src/hooks/useScroll"
 import ReadingProgressBar from "src/components/ReadingProgressBar"
+import { getPageTableOfContents } from "react-notion-x"
 
 type Props = {}
+
+type TocItem = {
+  id: string
+  indentLevel: number
+  text: string
+}
 
 const PostDetail: React.FC<Props> = () => {
   const data = usePostQuery()
@@ -19,6 +26,17 @@ const PostDetail: React.FC<Props> = () => {
   if (!data) return null
 
   const category = (data.category && data.category?.[0]) || undefined
+
+  const pageId =
+    (data as any).id || Object.keys(data.recordMap.block ?? {})[0] || ""
+
+  const toc: TocItem[] = useMemo(() => {
+    if (!data?.recordMap || !pageId) return []
+    // getPageTableOfContents(recordMap, pageId, options?)
+    return getPageTableOfContents(data.recordMap as any, pageId) as TocItem[]
+  }, [data?.recordMap, pageId])
+
+  const topTocItems = toc.filter((item) => item.indentLevel <= 1)
 
   return (
     <>
@@ -36,6 +54,16 @@ const PostDetail: React.FC<Props> = () => {
 
           {data.type[0] === "Post" && <PostHeader data={data} />}
 
+          {topTocItems.length > 0 && (
+            <StyledTopToc>
+              {topTocItems.map((item) => (
+                <a key={item.id} href={`#${item.id}`}>
+                  {item.text}
+                </a>
+              ))}
+            </StyledTopToc>
+          )}
+
           <div ref={articleRef}>
             <NotionRenderer recordMap={data.recordMap} />
           </div>
@@ -48,6 +76,24 @@ const PostDetail: React.FC<Props> = () => {
           )}
         </article>
       </StyledWrapper>
+
+      {toc.length > 0 && (
+        <StyledRightToc>
+          <div className="toc-title">목차</div>
+          <ul>
+            {toc.map((item) => (
+              <li
+                key={item.id}
+                style={{
+                  paddingLeft: `${item.indentLevel * 0.75}rem`,
+                }}
+              >
+                <a href={`#${item.id}`}>{item.text}</a>
+              </li>
+            ))}
+          </ul>
+        </StyledRightToc>
+      )}
     </>
   )
 }
@@ -70,5 +116,81 @@ const StyledWrapper = styled.div`
   > article {
     margin: 0 auto;
     max-width: 42rem;
+  }
+`
+
+const StyledTopToc = styled.nav`
+  margin: 1.5rem 0 2rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.4);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+
+  a {
+    color: rgba(100, 116, 139, 1);
+    text-decoration: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background-color: rgba(248, 250, 252, 1);
+      color: rgba(15, 23, 42, 1);
+    }
+  }
+`
+
+const StyledRightToc = styled.nav`
+  position: fixed;
+  top: 6rem;
+  right: 3rem;
+  max-width: 220px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: rgba(100, 116, 139, 1);
+  padding: 0.75rem 0.75rem 0.75rem 0.5rem;
+  border-radius: 0.75rem;
+  background-color: rgba(15, 23, 42, 0.02);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+
+  .toc-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: rgba(51, 65, 85, 1);
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  li + li {
+    margin-top: 0.25rem;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+    display: inline-block;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.375rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background-color: rgba(248, 250, 252, 1);
+      color: rgba(15, 23, 42, 1);
+    }
+  }
+
+  @media (max-width: 1200px) {
+    display: none;
   }
 `
