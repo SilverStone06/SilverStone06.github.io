@@ -4,7 +4,7 @@ const CONFIG = {
     name: "SongSuk",
     image: "/avatar.svg", // If you want to create your own notion avatar, check out https://notion-avatar.vercel.app
     role: "Aspiring Cloud/ML Engineer",
-    bio: "Building my foundations in cloud while preparing for machine learning.",
+    bio: "Building my foundations in Cloud while preparing for Machine Learning.",
     email: "ses0609@gmail.com",
     linkedin: "",
     github: "SilverStone06",

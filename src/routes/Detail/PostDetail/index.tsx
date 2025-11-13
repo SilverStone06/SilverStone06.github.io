@@ -1,16 +1,15 @@
 import React, { useMemo, useRef, useEffect } from "react"
+import styled from "@emotion/styled"
+import { getPageTableOfContents, idToUuid } from "notion-utils"
+
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import CommentBox from "./CommentBox"
 import Category from "src/components/Category"
-import styled from "@emotion/styled"
 import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useScroll from "src/hooks/useScroll"
 import ReadingProgressBar from "src/components/ReadingProgressBar"
-import { getPageTableOfContents, idToUuid } from "notion-utils"
-
-type Props = {}
 
 type TocItem = {
   id: string
@@ -18,86 +17,82 @@ type TocItem = {
   text: string
 }
 
-const PostDetail: React.FC<Props> = () => {
+function scrollToHeading(rawId: string) {
+  if (typeof document === "undefined" || typeof window === "undefined") return
+  if (!rawId) return
+
+  const candidates: string[] = [rawId]
+
+  try {
+    const uuid = idToUuid(rawId)
+    if (uuid && uuid !== rawId) candidates.push(uuid)
+  } catch {}
+
+  if (rawId.includes("-")) {
+    candidates.push(rawId.replace(/-/g, ""))
+  }
+
+  let target: HTMLElement | null = null
+
+  for (const cand of candidates) {
+    const el = document.getElementById(cand)
+    if (el) {
+      target = el as HTMLElement
+      break
+    }
+  }
+
+  if (!target) {
+    for (const cand of candidates) {
+      const anchor = document.querySelector<HTMLAnchorElement>(
+        `a.notion-hash-link[href="#${cand}"]`
+      )
+      if (anchor) {
+        target = (anchor.parentElement || anchor) as HTMLElement
+        break
+      }
+    }
+  }
+
+  if (!target) return
+
+  const headerOffset = 80
+  const rect = target.getBoundingClientRect()
+  const scrollTop = window.scrollY || window.pageYOffset
+  const targetY = rect.top + scrollTop - headerOffset
+
+  window.scrollTo({
+    top: targetY,
+    behavior: "smooth",
+  })
+
+  const finalId = target.id || rawId
+  if (finalId) {
+    history.replaceState(null, "", `#${finalId}`)
+  }
+}
+
+const PostDetail: React.FC = () => {
   const data = usePostQuery()
   const articleRef = useRef<HTMLDivElement | null>(null)
   const progress = useScroll(articleRef)
 
   const toc: TocItem[] = useMemo(() => {
-    if (!data?.recordMap?.block) return []
+  const recordMap = data?.recordMap as any
+  const blockMap = recordMap?.block as any
+  if (!blockMap) return []
 
-    const blocks = (data.recordMap as any).block
-    const firstBlockKey = Object.keys(blocks)[0]
-    const pageBlock = blocks[firstBlockKey]?.value
+  const firstBlockKey = Object.keys(blockMap)[0]
+  if (!firstBlockKey) return []
 
-    if (!pageBlock) return []
+  const pageBlock = blockMap[firstBlockKey]?.value
+  if (!pageBlock) return []
 
-    return getPageTableOfContents(pageBlock, data.recordMap as any) as TocItem[]
-  }, [data?.recordMap])
+  return getPageTableOfContents(pageBlock, recordMap) as TocItem[]
+}, [data?.recordMap])
 
-  if (!data) return null
 
-  const category = (data.category && data.category?.[0]) || undefined
   const topTocItems = toc.filter((item) => item.indentLevel <= 1)
-
-  const handleTocClick = (id: string) => (
-    e: React.MouseEvent<HTMLAnchorElement>
-  ) => {
-    e.preventDefault()
-    if (typeof document === "undefined") return
-
-    const candidates: string[] = []
-
-    if (id) candidates.push(id)
-
-    try {
-      const uuid = idToUuid(id)
-      if (uuid && uuid !== id) candidates.push(uuid)
-    } catch {}
-
-    if (id.includes("-")) {
-      candidates.push(id.replace(/-/g, ""))
-    }
-
-    let target: HTMLElement | null = null
-
-    for (const cand of candidates) {
-      const el = document.getElementById(cand)
-      if (el) {
-        target = el as HTMLElement
-        break
-      }
-    }
-
-    if (!target) {
-      for (const cand of candidates) {
-        const anchor = document.querySelector<HTMLAnchorElement>(
-          `a.notion-hash-link[href="#${cand}"]`
-        )
-        if (anchor) {
-          target = (anchor.parentElement || anchor) as HTMLElement
-          break
-        }
-      }
-    }
-
-    if (!target) return
-
-    const headerOffset = 80
-    const rect = target.getBoundingClientRect()
-    const scrollTop = window.scrollY || window.pageYOffset
-    const targetY = rect.top + scrollTop - headerOffset
-
-    window.scrollTo({
-      top: targetY,
-      behavior: "smooth",
-    })
-
-    const finalId = target.id || id
-    if (finalId) {
-      history.replaceState(null, "", `#${finalId}`)
-    }
-  }
 
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -116,10 +111,7 @@ const PostDetail: React.FC<Props> = () => {
 
       e.preventDefault()
       const id = href.slice(1)
-      const fakeEvent = { preventDefault() {} } as React.MouseEvent<
-        HTMLAnchorElement
-      >
-      handleTocClick(id)(fakeEvent)
+      scrollToHeading(id)
     }
 
     document.addEventListener("click", onClick)
@@ -127,6 +119,10 @@ const PostDetail: React.FC<Props> = () => {
       document.removeEventListener("click", onClick)
     }
   }, [])
+
+  if (!data) return null
+
+  const category = data.category?.[0]
 
   return (
     <>
@@ -150,7 +146,10 @@ const PostDetail: React.FC<Props> = () => {
                 <a
                   key={item.id}
                   href={`#${item.id}`}
-                  onClick={handleTocClick(item.id)}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    scrollToHeading(item.id)
+                  }}
                 >
                   {item.text}
                 </a>
@@ -178,13 +177,14 @@ const PostDetail: React.FC<Props> = () => {
             {toc.map((item) => (
               <li
                 key={item.id}
-                style={{
-                  paddingLeft: `${item.indentLevel * 0.75}rem`,
-                }}
+                style={{ paddingLeft: `${item.indentLevel * 0.75}rem` }}
               >
                 <a
                   href={`#${item.id}`}
-                  onClick={handleTocClick(item.id)}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    scrollToHeading(item.id)
+                  }}
                 >
                   {item.text}
                 </a>
@@ -215,26 +215,6 @@ const StyledWrapper = styled.div`
   > article {
     margin: 0 auto;
     max-width: 42rem;
-  }
-
-  .notion-callout,
-  .notion-quote {
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-
-  .notion-callout .notion-text,
-  .notion-quote .notion-text {
-    font-size: 0.9rem;
-  }
-
-  .notion-callout {
-    padding: 0.6rem 0.75rem;
-  }
-
-  .notion-quote {
-    padding-left: 0.9rem;
-    border-left-width: 3px;
   }
 `
 
