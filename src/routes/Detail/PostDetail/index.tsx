@@ -8,7 +8,7 @@ import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useScroll from "src/hooks/useScroll"
 import ReadingProgressBar from "src/components/ReadingProgressBar"
-import { getPageTableOfContents } from "react-notion-x"
+import { getPageTableOfContents } from "notion-utils"
 
 type Props = {}
 
