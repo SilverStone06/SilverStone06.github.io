@@ -7,10 +7,14 @@
 import fs from "fs"
 import path from "path"
 import matter from "gray-matter"
-import { getTextContent } from "notion-utils"
+import { getTextContent, idToUuid } from "notion-utils"
 
-import { getPosts } from "src/apis/notion-client/getPosts"
+import { CONFIG } from "site.config"
+import { NotionAPI } from "notion-client"
+
 import { getRecordMap } from "src/apis/notion-client/getRecordMap"
+import getAllPageIds from "src/libs/utils/notion/getAllPageIds"
+import getPageProperties from "src/libs/utils/notion/getPageProperties"
 import { customMapImageUrl } from "src/libs/utils/notion/customMapImageUrl"
 import { TPosts, TPost } from "src/types"
 
@@ -55,8 +59,12 @@ function deleteExistingMarkdownFiles() {
  */
 async function convertNotionPageToMarkdown(pageId: string): Promise<string> {
   try {
+    console.log(`  [DEBUG] Fetching recordMap for page: ${pageId}`)
     const recordMap = await getRecordMap(pageId)
-    return convertRecordMapToMarkdown(recordMap)
+    console.log(`  [DEBUG] RecordMap fetched, blocks count: ${Object.keys(recordMap?.block || {}).length}`)
+    const markdown = convertRecordMapToMarkdown(recordMap)
+    console.log(`  [DEBUG] Converted markdown length: ${markdown.length} characters`)
+    return markdown
   } catch (error) {
     console.error(`❌ Failed to get recordMap for page ${pageId}:`, error)
     return ""
@@ -71,6 +79,8 @@ function convertRecordMapToMarkdown(recordMap: any): string {
   const blocks: string[] = []
   const blockMap = recordMap.block || {}
   
+  console.log(`    [DEBUG] Total blocks in recordMap: ${Object.keys(blockMap).length}`)
+  
   // 루트 페이지 블록 찾기
   const rootBlockId = Object.keys(blockMap).find((id) => {
     const block = blockMap[id]?.value
@@ -78,11 +88,14 @@ function convertRecordMapToMarkdown(recordMap: any): string {
   })
   
   if (!rootBlockId) {
+    console.log(`    [DEBUG] No root page block found`)
     return ""
   }
   
+  console.log(`    [DEBUG] Found root page block: ${rootBlockId}`)
   const rootBlock = blockMap[rootBlockId]?.value
   if (rootBlock) {
+    console.log(`    [DEBUG] Root block has ${rootBlock.content?.length || 0} children`)
     const markdown = convertBlockWithChildren(rootBlock, blockMap, rootBlockId, 0)
     if (markdown) {
       blocks.push(markdown)
@@ -238,6 +251,202 @@ function buildFrontmatterFromPost(post: TPost) {
   }
 }
 
+/**
+ * Notion 페이지의 "commitStatus" 체크박스를 체크합니다.
+ */
+async function updateCommitStatusCheckbox(
+  pageId: string,
+  schema: any,
+  checked: boolean = true
+): Promise<boolean> {
+  try {
+    const notionToken = process.env.NOTION_TOKEN
+    if (!notionToken) {
+      console.warn("⚠️  NOTION_TOKEN not set, skipping commitStatus update")
+      return false
+    }
+
+    // 스키마에서 "commitStatus" 속성의 ID 찾기
+    let commitStatusPropertyId: string | null = null
+    for (const [key, value]: any of Object.entries(schema)) {
+      if (value?.name === "commitStatus" && value?.type === "checkbox") {
+        commitStatusPropertyId = key
+        break
+      }
+    }
+
+    if (!commitStatusPropertyId) {
+      console.warn("⚠️  commitStatus property not found in schema")
+      return false
+    }
+
+    // 페이지 ID를 UUID 형식으로 변환 (필요한 경우)
+    const pageUuid = idToUuid(pageId)
+    
+    // Notion API v1을 사용하여 페이지 속성 업데이트
+    const response = await fetch(`https://api.notion.com/v1/pages/${pageUuid}`, {
+      method: "PATCH",
+      headers: {
+        "Authorization": `Bearer ${notionToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        properties: {
+          [commitStatusPropertyId]: {
+            checkbox: checked,
+          },
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`❌ Failed to update commitStatus: ${response.status} ${errorText}`)
+      return false
+    }
+
+    return true
+  } catch (error: any) {
+    console.error(`❌ Error updating commitStatus:`, error.message)
+    return false
+  }
+}
+
+/**
+ * "gitCommit" 체크박스가 체크된 포스트만 가져옵니다.
+ */
+async function getPostsWithCheckboxFilter(): Promise<{ posts: TPosts; schema: any }> {
+  let id = CONFIG.notionConfig.pageId as string
+  const api = new NotionAPI()
+
+  console.log("[DEBUG] Fetching Notion page...")
+  const response = await api.getPage(id)
+  id = idToUuid(id)
+  const collection = Object.values(response.collection)[0]?.value
+  const block = response.block
+  const schema = collection?.schema
+
+  console.log(`[DEBUG] Schema keys: ${Object.keys(schema || {}).length}`)
+  console.log(`[DEBUG] Block keys: ${Object.keys(block || {}).length}`)
+
+  const rawMetadata = block[id].value
+
+  // Check Type
+  if (
+    rawMetadata?.type !== "collection_view_page" &&
+    rawMetadata?.type !== "collection_view"
+  ) {
+    console.log(`[DEBUG] Invalid type: ${rawMetadata?.type}`)
+    return { posts: [] as TPosts, schema: {} }
+  }
+
+  // Construct Data
+  const pageIds = getAllPageIds(response)
+  console.log(`[DEBUG] Found ${pageIds.length} page IDs`)
+  const data = []
+  
+  for (let i = 0; i < pageIds.length; i++) {
+    const pageId = pageIds[i]
+    
+    // 먼저 gitCommit 체크박스를 확인 (properties를 가져오기 전에)
+    let gitCommitChecked = false
+    let foundGitCommitProperty = false
+    let tempTitle = pageId
+    
+    console.log(`\n[DEBUG] Processing page ${i + 1}/${pageIds.length}: ${pageId}`)
+    console.log(`  [DEBUG] block[pageId] exists: ${!!block[pageId]}`)
+    console.log(`  [DEBUG] block[pageId]?.value exists: ${!!block[pageId]?.value}`)
+    console.log(`  [DEBUG] block[pageId]?.value?.properties exists: ${!!block[pageId]?.value?.properties}`)
+    console.log(`  [DEBUG] schema exists: ${!!schema}`)
+    
+    if (block[pageId]?.value?.properties && schema) {
+      // 모든 속성 확인 (디버깅용)
+      tempTitle = getTextContent(block[pageId]?.value?.properties?.title || []) || pageId
+      console.log(`  [DEBUG] Checking page: ${tempTitle}`)
+      console.log(`  [DEBUG] Properties count: ${Object.keys(block[pageId].value.properties).length}`)
+      
+      for (const [key, val]: any of Object.entries(block[pageId].value.properties)) {
+        const propName = schema[key]?.name
+        const propType = schema[key]?.type
+        
+        // 체크박스 속성 모두 로깅
+        if (propType === "checkbox") {
+          console.log(`  [DEBUG] Found checkbox property: "${propName}" = ${JSON.stringify(val)}`)
+        }
+        
+        if (propName === "gitCommit" && propType === "checkbox") {
+          foundGitCommitProperty = true
+          // 체크박스 값 확인: val은 배열 형태일 수 있음
+          // Notion API에서 체크박스는 보통 [[true]] 또는 [[false]] 형태
+          let checkboxValue: any = null
+          
+          if (Array.isArray(val) && val.length > 0) {
+            if (Array.isArray(val[0]) && val[0].length > 0) {
+              checkboxValue = val[0][0]
+            } else {
+              checkboxValue = val[0]
+            }
+          } else {
+            checkboxValue = val
+          }
+          
+          console.log(`  [DEBUG] gitCommit checkbox value: ${JSON.stringify(checkboxValue)} (type: ${typeof checkboxValue})`)
+          
+          // 다양한 형태의 true 값 확인
+          gitCommitChecked = 
+            checkboxValue === true || 
+            checkboxValue === "Yes" || 
+            checkboxValue === "yes" ||
+            checkboxValue === "True" || 
+            checkboxValue === "true" ||
+            checkboxValue === 1 ||
+            checkboxValue === "1"
+          
+          console.log(`  [DEBUG] gitCommit checked: ${gitCommitChecked}`)
+          break
+        }
+      }
+    } else {
+      console.log(`  [DEBUG] Skipping property check - conditions not met`)
+    }
+    
+    // gitCommit 체크박스가 없거나 체크되지 않았으면 스킵
+    if (!foundGitCommitProperty) {
+      console.log(`⏭️  Skipping ${tempTitle} (gitCommit property not found)`)
+      continue
+    }
+    
+    if (!gitCommitChecked) {
+      console.log(`⏭️  Skipping ${tempTitle} (gitCommit checkbox not checked)`)
+      continue
+    }
+    
+    console.log(`✅ Including ${tempTitle} (gitCommit checkbox checked)`)
+    
+    // 필터링을 통과한 경우에만 properties 가져오기
+    const properties = (await getPageProperties(pageId, block, schema)) || null
+
+    // Add fullwidth, createdtime to properties
+    properties.createdTime = new Date(
+      block[pageId].value?.created_time
+    ).toString()
+    properties.fullWidth =
+      (block[pageId].value?.format as any)?.page_full_width ?? false
+
+    data.push(properties)
+  }
+
+  // Sort by date
+  data.sort((a: any, b: any) => {
+    const dateA: any = new Date(a?.date?.start_date || a.createdTime)
+    const dateB: any = new Date(b?.date?.start_date || b.createdTime)
+    return dateB - dateA
+  })
+
+  return { posts: data as TPosts, schema }
+}
+
 async function syncNotionToMd() {
   ensurePostsDir()
 
@@ -245,10 +454,12 @@ async function syncNotionToMd() {
   console.log("🗑️  Deleting existing markdown files...")
   deleteExistingMarkdownFiles()
 
-  console.log("📥 Fetching posts from Notion...")
-  const posts: TPosts = await getPosts()
+  console.log("📥 Fetching posts from Notion (gitCommit checkbox checked only)...")
+  const { posts, schema } = await getPostsWithCheckboxFilter()
 
-  console.log(`✅ Got ${posts.length} posts from Notion.`)
+  console.log(`✅ Got ${posts.length} posts from Notion (with gitCommit checkbox checked).`)
+
+  const successfullyProcessed: string[] = []
 
   for (const post of posts) {
     if (!post.slug) {
@@ -279,6 +490,20 @@ async function syncNotionToMd() {
     const md = matter.stringify(finalContent.trim() + "\n", frontmatter)
     fs.writeFileSync(filePath, md, "utf8")
     console.log(`✅ Created: ${fileName}`)
+    
+    // 성공적으로 처리된 포스트 ID 저장
+    successfullyProcessed.push(post.id)
+  }
+
+  // 성공적으로 처리된 포스트의 "commitStatus" 체크박스 업데이트
+  if (successfullyProcessed.length > 0) {
+    console.log(`\n📝 Updating commitStatus checkbox for ${successfullyProcessed.length} post(s)...`)
+    for (const pageId of successfullyProcessed) {
+      const success = await updateCommitStatusCheckbox(pageId, schema, true)
+      if (success) {
+        console.log(`✅ Updated commitStatus for page ${pageId}`)
+      }
+    }
   }
 
   console.log("🎉 Notion → MD sync finished.")
