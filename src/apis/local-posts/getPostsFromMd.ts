@@ -15,6 +15,11 @@ const POSTS_DIR = path.join(process.cwd(), "src", "posts")
  * - frontmatter를 TPost 모양에 최대한 그대로 매핑해서 돌려줌
  */
 export const getPostsFromMd = async (): Promise<TPosts> => {
+  // src/posts 디렉터리가 없으면 빈 배열 반환 (빌드 시 CI에서는 로컬 md가 없을 수 있음)
+  if (!fs.existsSync(POSTS_DIR)) {
+    return [] as TPosts
+  }
+
   // src/posts 안에 있는 .md 파일 목록
   const files = fs
     .readdirSync(POSTS_DIR, { withFileTypes: true })
