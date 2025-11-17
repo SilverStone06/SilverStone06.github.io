@@ -24,4 +24,16 @@ author:
       https://lh5.googleusercontent.com/-lr5pjNrudeM/AAAAAAAAAAI/AAAAAAAAAAA/AMZuuck_j3l31Z6ws1a44V8GfS68MDZZvg/photo.jpg
 fullWidth: false
 ---
+# morethan log
 
+Next.js static blog using Notion as a Content Management System (CMS). Supports both Blog format Post as well as Page format for Resume. Deployed using Vercel.
+
+Repository | Demo Blog | Demo Resume
+
+### Writing Post
+
+When you write a post, you should check the properties below.
+
+## Contributing
+
+Check out the Contributing Guide.
