@@ -62,7 +62,7 @@ async function convertNotionPageToMarkdown(pageId: string): Promise<string> {
     console.log(`  [DEBUG] Fetching recordMap for page: ${pageId}`)
     const recordMap = await getRecordMap(pageId)
     console.log(`  [DEBUG] RecordMap fetched, blocks count: ${Object.keys(recordMap?.block || {}).length}`)
-    const markdown = convertRecordMapToMarkdown(recordMap)
+    const markdown = convertRecordMapToMarkdown(recordMap, pageId)
     console.log(`  [DEBUG] Converted markdown length: ${markdown.length} characters`)
     return markdown
   } catch (error) {
@@ -75,26 +75,69 @@ async function convertNotionPageToMarkdown(pageId: string): Promise<string> {
  * Notion recordMap을 Markdown 문자열로 변환합니다.
  * 블록의 계층 구조를 고려하고, 이미지도 포함합니다.
  */
-function convertRecordMapToMarkdown(recordMap: any): string {
+function convertRecordMapToMarkdown(recordMap: any, pageId: string): string {
   const blocks: string[] = []
   const blockMap = recordMap.block || {}
   
   console.log(`    [DEBUG] Total blocks in recordMap: ${Object.keys(blockMap).length}`)
   
-  // 루트 페이지 블록 찾기
-  const rootBlockId = Object.keys(blockMap).find((id) => {
-    const block = blockMap[id]?.value
-    return block?.type === "page" && !block?.parent_id
-  })
+  // 페이지 ID를 UUID 형식으로 변환 (여러 형식 시도)
+  const pageUuid = idToUuid(pageId)
+  const pageIdNoHyphens = pageId.replace(/-/g, '')
+  const pageUuidFromNoHyphens = idToUuid(pageIdNoHyphens)
+  
+  console.log(`    [DEBUG] Original pageId: ${pageId}`)
+  console.log(`    [DEBUG] Converted pageUuid: ${pageUuid}`)
+  console.log(`    [DEBUG] pageUuidFromNoHyphens: ${pageUuidFromNoHyphens}`)
+  
+  // 루트 페이지 블록 찾기 (여러 방법 시도)
+  let rootBlockId: string | undefined = undefined
+  
+  // 방법 1: 직접 페이지 ID로 찾기 (여러 형식 시도)
+  const possibleIds = [pageUuid, pageId, pageUuidFromNoHyphens, pageIdNoHyphens]
+  for (const testId of possibleIds) {
+    if (blockMap[testId]?.value?.type === "page") {
+      rootBlockId = testId
+      console.log(`    [DEBUG] Found root page block by direct ID: ${rootBlockId}`)
+      break
+    }
+  }
+  
+  // 방법 2: type이 "page"인 모든 블록 찾기
+  if (!rootBlockId) {
+    const pageBlocks = Object.keys(blockMap).filter((id) => {
+      const block = blockMap[id]?.value
+      return block?.type === "page"
+    })
+    console.log(`    [DEBUG] Found ${pageBlocks.length} page blocks: ${pageBlocks.slice(0, 3).join(', ')}`)
+    
+    // parent_id가 없거나, parent_id가 페이지 ID와 일치하는 블록 찾기
+    rootBlockId = pageBlocks.find((id) => {
+      const block = blockMap[id]?.value
+      const hasNoParent = !block?.parent_id
+      const parentMatches = possibleIds.includes(block?.parent_id)
+      return hasNoParent || parentMatches
+    })
+    
+    if (!rootBlockId && pageBlocks.length > 0) {
+      // 첫 번째 페이지 블록 사용 (보통 루트 페이지)
+      rootBlockId = pageBlocks[0]
+      console.log(`    [DEBUG] Using first page block as root: ${rootBlockId}`)
+    }
+  }
   
   if (!rootBlockId) {
-    console.log(`    [DEBUG] No root page block found`)
+    console.log(`    [DEBUG] No root page block found. Available block types:`)
+    Object.keys(blockMap).slice(0, 10).forEach((id) => {
+      const block = blockMap[id]?.value
+      console.log(`      - ${id}: type=${block?.type}, parent_id=${block?.parent_id}`)
+    })
     return ""
   }
   
-  console.log(`    [DEBUG] Found root page block: ${rootBlockId}`)
   const rootBlock = blockMap[rootBlockId]?.value
   if (rootBlock) {
+    console.log(`    [DEBUG] Root block type: ${rootBlock.type}`)
     console.log(`    [DEBUG] Root block has ${rootBlock.content?.length || 0} children`)
     const markdown = convertBlockWithChildren(rootBlock, blockMap, rootBlockId, 0)
     if (markdown) {
@@ -280,8 +323,14 @@ async function updateCommitStatusCheckbox(
       return false
     }
 
-    // 페이지 ID를 UUID 형식으로 변환 (필요한 경우)
-    const pageUuid = idToUuid(pageId)
+    // 페이지 ID가 이미 UUID 형식인지 확인
+    // UUID 형식: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (하이픈 포함 36자)
+    let pageUuid = pageId
+    if (!pageId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      pageUuid = idToUuid(pageId)
+    }
+    
+    console.log(`  [DEBUG] Updating commitStatus for page: ${pageUuid}`)
     
     // Notion API v1을 사용하여 페이지 속성 업데이트
     const response = await fetch(`https://api.notion.com/v1/pages/${pageUuid}`, {
