@@ -81,15 +81,15 @@ const PostDetail: React.FC = () => {
   const articleRef = useRef<HTMLDivElement | null>(null)
   const progress = useScroll(articleRef)
 
-  if (!data) return null
+  const content = (data as any)?.content || "" // getPostsFromMd에서 넣어준 md 본문
 
-  const content = (data as any).content || "" // getPostsFromMd에서 넣어준 md 본문
-
-  // Markdown 기반 TOC 생성
+  // Markdown 기반 TOC 생성 (Hook은 항상 같은 순서로 호출되어야 하므로 early return 전에 호출)
   const toc: TocItem[] = useMemo(() => {
     if (!content) return []
     return buildTocFromMarkdown(content)
   }, [content])
+
+  if (!data) return null
 
   const topTocItems = toc.filter((item) => item.indentLevel <= 0)
   const category = data.category?.[0]
