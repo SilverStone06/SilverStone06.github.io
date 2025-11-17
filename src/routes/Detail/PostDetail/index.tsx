@@ -12,6 +12,7 @@ import ReadingProgressBar from "src/components/ReadingProgressBar"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
+import Image from "next/image"
 
 type TocItem = {
   id: string
@@ -147,6 +148,24 @@ const PostDetail: React.FC = () => {
                   const text = String(props.children ?? "")
                   const id = slugify(text)
                   return <h3 id={id} {...props} />
+                },
+                img: ({ node, ...props }) => {
+                  // 이미지 경로가 /images/posts/로 시작하는 경우 Next.js Image 컴포넌트 사용
+                  const src = props.src || ""
+                  if (src.startsWith("/images/")) {
+                    return (
+                      <Image
+                        src={src}
+                        alt={props.alt || ""}
+                        width={800}
+                        height={600}
+                        style={{ width: "100%", height: "auto" }}
+                        unoptimized
+                      />
+                    )
+                  }
+                  // 외부 이미지나 다른 경로는 일반 img 태그 사용
+                  return <img {...props} style={{ maxWidth: "100%", height: "auto" }} />
                 },
               }}
             >

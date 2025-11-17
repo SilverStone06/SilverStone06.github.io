@@ -67,16 +67,33 @@ export const getPostsFromMd = async (): Promise<TPosts> => {
     ]
   }
 
+    // date 형식 정규화: { start_date: string } 형식으로 변환
+    let normalizedDate: { start_date: string }
+    if (fm.date && typeof fm.date === "object" && "start_date" in fm.date) {
+      // 이미 { start_date: string } 형식
+      normalizedDate = fm.date as { start_date: string }
+    } else if (fm.date && typeof fm.date === "string") {
+      // 문자열인 경우 객체로 변환
+      normalizedDate = { start_date: fm.date }
+    } else {
+      // date가 없으면 createdTime 사용
+      const defaultDate = fm.createdTime ?? new Date().toISOString()
+      normalizedDate = { start_date: defaultDate }
+    }
+
+    // createdTime / date가 비어있으면 기본값 세팅
+    const createdTime =
+      fm.createdTime ??
+      normalizedDate.start_date ??
+      new Date().toISOString()
+
     // 기존 TPost 구조를 최대한 그대로 맞춰줌
     const post: any = {
       ...fm,
+      id: fm.id ?? slug, // TPost 타입에 id 필드가 필요하므로 유지 (하지만 실제로는 사용하지 않음)
       slug,
-      // createdTime / date가 비어있으면 기본값 세팅
-      createdTime:
-        fm.createdTime ??
-        fm.date?.start_date ??
-        fm.date ??
-        new Date().toISOString(),
+      date: normalizedDate, // 정규화된 date 형식 사용
+      createdTime,
       // status / type은 기존 코드에서 배열로 쓰니까 형태 맞춰줌
       status: Array.isArray(fm.status) ? fm.status : [fm.status ?? "Public"],
       type: Array.isArray(fm.type) ? fm.type : [fm.type ?? "Post"],
@@ -85,6 +102,7 @@ export const getPostsFromMd = async (): Promise<TPosts> => {
       summary: fm.summary ?? "",
       thumbnail: fm.thumbnail ?? null,
       author,
+      fullWidth: fm.fullWidth ?? false, // fullWidth 필드 추가
       // 나중에 md 본문을 Detail에서 쓰고 싶으면 여기 content도 같이 넘길 수 있음
       content,
     }
