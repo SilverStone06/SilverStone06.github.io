@@ -1,15 +1,17 @@
-import React, { useMemo, useRef, useEffect } from "react"
+import React, { useMemo, useRef } from "react"
 import styled from "@emotion/styled"
-import { getPageTableOfContents, idToUuid } from "notion-utils"
 
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import CommentBox from "./CommentBox"
 import Category from "src/components/Category"
-import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useScroll from "src/hooks/useScroll"
 import ReadingProgressBar from "src/components/ReadingProgressBar"
+
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import rehypeRaw from "rehype-raw"
 
 type TocItem = {
   id: string
@@ -17,43 +19,48 @@ type TocItem = {
   text: string
 }
 
-function scrollToHeading(rawId: string) {
+// 간단한 slug 생성기 (제목 → id)
+const slugify = (text: string): string =>
+  text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+
+// Markdown 본문에서 ##, ### 헤딩만 뽑아서 TOC로 사용
+const buildTocFromMarkdown = (content: string): TocItem[] => {
+  const lines = content.split("\n")
+  const toc: TocItem[] = []
+
+  for (const line of lines) {
+    const h2Match = /^##\s+(.+)$/.exec(line)
+    const h3Match = /^###\s+(.+)$/.exec(line)
+
+    if (h2Match) {
+      const text = h2Match[1].trim()
+      toc.push({
+        id: slugify(text),
+        text,
+        indentLevel: 0,
+      })
+    } else if (h3Match) {
+      const text = h3Match[1].trim()
+      toc.push({
+        id: slugify(text),
+        text,
+        indentLevel: 1,
+      })
+    }
+  }
+
+  return toc
+}
+
+function scrollToHeading(id: string) {
   if (typeof document === "undefined" || typeof window === "undefined") return
-  if (!rawId) return
+  if (!id) return
 
-  const candidates: string[] = [rawId]
-
-  try {
-    const uuid = idToUuid(rawId)
-    if (uuid && uuid !== rawId) candidates.push(uuid)
-  } catch {}
-
-  if (rawId.includes("-")) {
-    candidates.push(rawId.replace(/-/g, ""))
-  }
-
-  let target: HTMLElement | null = null
-
-  for (const cand of candidates) {
-    const el = document.getElementById(cand)
-    if (el) {
-      target = el as HTMLElement
-      break
-    }
-  }
-
-  if (!target) {
-    for (const cand of candidates) {
-      const anchor = document.querySelector<HTMLAnchorElement>(
-        `a.notion-hash-link[href="#${cand}"]`
-      )
-      if (anchor) {
-        target = (anchor.parentElement || anchor) as HTMLElement
-        break
-      }
-    }
-  }
-
+  const target = document.getElementById(id)
   if (!target) return
 
   const headerOffset = 80
@@ -66,10 +73,7 @@ function scrollToHeading(rawId: string) {
     behavior: "smooth",
   })
 
-  const finalId = target.id || rawId
-  if (finalId) {
-    history.replaceState(null, "", `#${finalId}`)
-  }
+  history.replaceState(null, "", `#${id}`)
 }
 
 const PostDetail: React.FC = () => {
@@ -77,51 +81,17 @@ const PostDetail: React.FC = () => {
   const articleRef = useRef<HTMLDivElement | null>(null)
   const progress = useScroll(articleRef)
 
-  const toc: TocItem[] = useMemo(() => {
-  const recordMap = data?.recordMap as any
-  const blockMap = recordMap?.block as any
-  if (!blockMap) return []
-
-  const firstBlockKey = Object.keys(blockMap)[0]
-  if (!firstBlockKey) return []
-
-  const pageBlock = blockMap[firstBlockKey]?.value
-  if (!pageBlock) return []
-
-  return getPageTableOfContents(pageBlock, recordMap) as TocItem[]
-}, [data?.recordMap])
-
-
-  const topTocItems = toc.filter((item) => item.indentLevel <= 1)
-
-  useEffect(() => {
-    if (typeof document === "undefined") return
-
-    const onClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null
-      if (!target) return
-
-      const anchor = target.closest("a.notion-hash-link") as
-        | HTMLAnchorElement
-        | null
-      if (!anchor) return
-
-      const href = anchor.getAttribute("href") || ""
-      if (!href.startsWith("#")) return
-
-      e.preventDefault()
-      const id = href.slice(1)
-      scrollToHeading(id)
-    }
-
-    document.addEventListener("click", onClick)
-    return () => {
-      document.removeEventListener("click", onClick)
-    }
-  }, [])
-
   if (!data) return null
 
+  const content = (data as any).content || "" // getPostsFromMd에서 넣어준 md 본문
+
+  // Markdown 기반 TOC 생성
+  const toc: TocItem[] = useMemo(() => {
+    if (!content) return []
+    return buildTocFromMarkdown(content)
+  }, [content])
+
+  const topTocItems = toc.filter((item) => item.indentLevel <= 0)
   const category = data.category?.[0]
 
   return (
@@ -158,7 +128,30 @@ const PostDetail: React.FC = () => {
           )}
 
           <div ref={articleRef}>
-            <NotionRenderer recordMap={data.recordMap} />
+            {/* 🔥 여기서 md 본문 렌더링 */}
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
+              components={{
+                h1: ({ node, ...props }) => {
+                  const text = String(props.children ?? "")
+                  const id = slugify(text)
+                  return <h1 id={id} {...props} />
+                },
+                h2: ({ node, ...props }) => {
+                  const text = String(props.children ?? "")
+                  const id = slugify(text)
+                  return <h2 id={id} {...props} />
+                },
+                h3: ({ node, ...props }) => {
+                  const text = String(props.children ?? "")
+                  const id = slugify(text)
+                  return <h3 id={id} {...props} />
+                },
+              }}
+            >
+              {content}
+            </ReactMarkdown>
           </div>
 
           {data.type[0] === "Post" && (
@@ -217,25 +210,23 @@ const StyledWrapper = styled.div`
     max-width: 42rem;
   }
 
-    /* Notion callout / quote text 크기 줄이기 */
+  /* 예전 Notion callout/quote 스타일은 남겨둬도 문제 없음.
+     추후 정리 예정 */
   .notion-callout *,
   .notion-quote * {
-    font-size: 0.90rem !important;
+    font-size: 0.9rem !important;
     line-height: 1.55 !important;
   }
 
-    /* 노션 구분선(divider) */
   .notion-hr {
     border: none;
     border-top: 2px solid
       ${({ theme }) =>
         theme.scheme === "light"
-          ? "rgba(148, 163, 184, 0.7)"   // 라이트 모드
-          : "rgba(148, 163, 184, 0.4)"}; // 다크 모드
+          ? "rgba(148, 163, 184, 0.7)"
+          : "rgba(148, 163, 184, 0.4)"};
     margin: 1.75rem 0;
   }
-
-
 `
 
 const StyledTopToc = styled.nav`
