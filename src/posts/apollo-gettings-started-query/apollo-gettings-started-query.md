@@ -72,13 +72,13 @@ Now, in order to run a query, we need to know what kind of data can be retrieved
 
 If you use Apollo Explorer, you can see what kind of data can be retrieved through the corresponding url like the API specification of the Rest API. First of all, if you create an account through the link and enter https://countries.trevorblades.com, the endpoint we entered, the following screen will appear.
 
-![Untitled](https://www.notion.so/image/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2F64ab15f5-d7e2-4f35-8a7b-162fc13d951a%2FUntitled.png?table=block&id=&cache=v2)
+![Untitled](/images/posts/apollo-gettings-started-query/image1.png)
 
 You can check the schema here and run queries easily. (Think of it as a tool similar to the REST API's Postman.)
 
 If you go to the Schema page, the data that can be imported is specified. Of these, we will bring and use the code name emoji from Country.
 
-![Untitled](https://www.notion.so/image/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2F0b99fbff-4949-414a-8c3d-f2f99eb8ea3f%2FUntitled.png?table=block&id=&cache=v2)
+![Untitled](/images/posts/apollo-gettings-started-query/image2.png)
 
 You can run the query below on the Operations page to check if it is being received normally.
 
@@ -94,7 +94,7 @@ query ExampleQuery {
 
 If the data comes out normally as shown in the image below, it is successful.
 
-![Untitled](https://www.notion.so/image/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2Fc9244032-ff5b-43e5-a791-dcc331dcb625%2FUntitled.png?table=block&id=&cache=v2)
+![Untitled](/images/posts/apollo-gettings-started-query/image3.png)
 
 ## Data fetching in Client-Side-Rendering
 
@@ -226,7 +226,7 @@ export default function ClientSide() {
 
 The data should be output normally as shown below.
 
-![Untitled](https://www.notion.so/image/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2F7847e10a-c8f3-4663-84aa-5ccf64b04e75%2FUntitled.png?table=block&id=&cache=v2)
+![Untitled](/images/posts/apollo-gettings-started-query/image4.png)
 
 ## concluding
 
