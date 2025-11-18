@@ -6,7 +6,7 @@ on:
       message:
         description: 'Commit message'
         required: false
-        default: 'Sync posts from Notion'
+        default: 'Update : New posts'
   repository_dispatch:
     types: [RUN_WORKFLOW_DISPATCH]
 
@@ -95,7 +95,7 @@ jobs:
             echo "No changes to commit in src/posts/"
           else
             echo "Committing changes..."
-            git commit -m "${{ github.event.inputs.message || github.event.client_payload.message || 'Sync posts from Notion' }}"
+            git commit -m "${{ github.event.inputs.message || github.event.client_payload.message || 'Update : New Posts' }}"
             echo "Pushing changes..."
             git push ${REPO_URL} main
           fi
