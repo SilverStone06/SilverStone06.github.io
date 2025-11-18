@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: "notion-sync"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   sync-and-commit:
@@ -108,6 +108,9 @@ jobs:
     needs: sync-and-commit
     # 변경사항이 있거나 수동 실행일 때만 배포 (repository_dispatch는 변경사항이 있을 때만)
     if: needs.sync-and-commit.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+    concurrency:
+      group: "pages"
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -126,5 +129,6 @@ jobs:
         with:
           path: ./out
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
 
