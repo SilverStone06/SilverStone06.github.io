@@ -22,4 +22,4 @@ fullWidth: false
 ---
 # 공 사 중 ❗
 
-![KakaoTalk_Photo_2022-09-30-10-21-35.jpeg](https://www.notion.so/image/https%3A%2F%2Fs3-us-west-2.amazonaws.com%2Fsecure.notion-static.com%2Fa3abb6a0-bc8c-4366-aa80-f7b002b1baa5%2FKakaoTalk_Photo_2022-09-30-10-21-35.jpeg?table=block&id=&cache=v2)
+![KakaoTalk_Photo_2022-09-30-10-21-35.jpeg](/images/posts/about/image1.jpg)
