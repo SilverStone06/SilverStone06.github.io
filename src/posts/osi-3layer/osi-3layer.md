@@ -10,12 +10,11 @@ status:
 type:
   - Post
 tags:
-  - CSS
   - Network
   - OSI
 category:
   - "\U0001F916 Computer Science"
-summary: OSI 3 Layer에 대해 알아볼까나
+summary: Let's load the sitemap dynamically
 thumbnail: null
 author:
   - id: 29ad872b-594c-816f-bc65-000286fbcef6

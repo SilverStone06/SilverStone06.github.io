@@ -10,7 +10,6 @@ status:
 type:
   - Post
 tags:
-  - CSS
   - Network
   - OSI
 category:
